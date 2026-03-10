@@ -1,47 +1,76 @@
 .hero-banner{
-  background:linear-gradient(135deg,#1e3c72,#2a5298);
-  color:white;
-  padding:90px 40px;
-  border-radius:12px;
-  margin-bottom:50px;
-  box-shadow:0 10px 40px rgba(0,0,0,0.15);
+background:linear-gradient(135deg,#0f2027,#203a43,#2c5364);
+color:white;
+padding:110px 40px;
+border-radius:16px;
+margin-bottom:60px;
+text-align:center;
+box-shadow:0 15px 50px rgba(0,0,0,0.25);
 }
 
 .hero-banner h1{
-  font-size:42px;
-  font-weight:700;
-  margin-bottom:15px;
+font-size:48px;
+font-weight:800;
+margin-bottom:15px;
 }
 
 .hero-banner p{
-  font-size:18px;
-  margin-bottom:25px;
+font-size:20px;
+opacity:0.9;
+margin-bottom:30px;
+}
+
+.platform-stats{
+margin-bottom:60px;
+}
+
+.stat-box{
+background:white;
+border-radius:14px;
+padding:30px 20px;
+box-shadow:0 6px 25px rgba(0,0,0,0.08);
+transition:0.3s;
+}
+
+.stat-box:hover{
+transform:translateY(-5px);
+box-shadow:0 15px 40px rgba(0,0,0,0.15);
+}
+
+.stat-box h3{
+font-size:34px;
+font-weight:800;
+color:#007bff;
+margin-bottom:8px;
+}
+
+.stat-box p{
+font-size:15px;
+font-weight:600;
+color:#555;
 }
 
 .idea-card{
-
-  background:white;
-  border:none;
-  border-radius:16px;
-
-  padding:10px;
-
-  box-shadow:0 8px 30px rgba(0,0,0,0.08);
-
-  transition:all 0.35s ease;
-
-  margin-bottom:35px;
-
-  height:100%;
-
+background:white;
+border:none;
+border-radius:18px;
+padding:0;
+box-shadow:0 10px 35px rgba(0,0,0,0.08);
+transition:all 0.35s ease;
+margin-bottom:30px;
+overflow:hidden;
 }
 
 .idea-card:hover{
+transform:translateY(-8px);
+box-shadow:0 20px 50px rgba(0,0,0,0.18);
+}
 
-  transform:translateY(-10px) scale(1.02);
-
-  box-shadow:0 18px 45px rgba(0,0,0,0.18);
-
+.idea-title{
+font-size:20px;
+font-weight:700;
+margin-bottom:10px;
+color:#222;
 }
 
 .card-body{
@@ -50,19 +79,6 @@
 
 }
 
-.idea-title{
-
-  font-size:22px;
-
-  font-weight:700;
-
-  margin-bottom:12px;
-
-  color:#222;
-
-  min-height:60px;
-
-}
 
 .badge-info{
 
@@ -158,25 +174,16 @@
 }
 
 .event-card{
-
-  border:none;
-
-  border-radius:14px;
-
-  box-shadow:0 6px 25px rgba(0,0,0,0.08);
-
-  transition:all 0.3s ease;
-
-  padding:10px;
-
+background:white;
+border-radius:16px;
+padding:25px;
+box-shadow:0 8px 30px rgba(0,0,0,0.08);
+transition:0.3s;
 }
 
 .event-card:hover{
-
-  transform:translateY(-6px);
-
-  box-shadow:0 15px 35px rgba(0,0,0,0.15);
-
+transform:translateY(-6px);
+box-shadow:0 16px 45px rgba(0,0,0,0.15);
 }
 
 h2{
@@ -194,3 +201,88 @@ h2{
   margin-bottom:20px;
 
 }
+/* ===============================
+INNOVATION HUB ANALYTICS DASHBOARD
+=============================== */
+
+.analytics-dashboard{
+  max-width:1100px;
+  margin:auto;
+}
+
+/* Grid layout for charts */
+
+.analytics-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:30px;
+  margin-top:30px;
+}
+
+/* Chart card */
+
+.analytics-card{
+  background:white;
+  border-radius:12px;
+  box-shadow:0 8px 25px rgba(0,0,0,0.08);
+  padding:20px;
+  transition:0.3s;
+}
+
+.analytics-card:hover{
+  transform:translateY(-4px);
+  box-shadow:0 12px 35px rgba(0,0,0,0.15);
+}
+
+/* Chart titles */
+
+.analytics-card h3{
+  font-size:18px;
+  font-weight:700;
+  margin-bottom:15px;
+  color:#333;
+}
+
+/* Control chart size */
+
+.analytics-card canvas{
+  width:100% !important;
+  height:250px !important;
+}
+
+/* Contributors list */
+
+.analytics-contributors{
+  margin-top:40px;
+  background:white;
+  border-radius:12px;
+  padding:20px;
+  box-shadow:0 8px 25px rgba(0,0,0,0.08);
+}
+
+.analytics-contributors h3{
+  font-weight:700;
+  margin-bottom:15px;
+}
+
+.analytics-contributors ol{
+  padding-left:20px;
+}
+
+.analytics-contributors li{
+  padding:6px 0;
+  font-weight:500;
+}
+
+#homepageChart{
+max-height:260px;
+margin-top:20px;
+}
+
+.container h2{
+font-size:30px;
+font-weight:800;
+text-align:center;
+margin-bottom:40px;
+}
+

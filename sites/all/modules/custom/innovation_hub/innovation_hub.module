@@ -97,12 +97,15 @@ function innovation_hub_vote($nid) {
   ", array(':nid' => $nid))->fetchField();
 
   $existing = db_query("
-  SELECT field_votes_value
-  FROM {field_data_field_votes}
-  WHERE entity_id = :nid
+SELECT entity_id
+FROM {field_data_field_votes}
+WHERE entity_id = :nid
+AND entity_type='node'
+AND bundle='project_idea'
+AND deleted=0
 ", array(':nid'=>$nid))->fetchField();
 
-if ($existing === FALSE) {
+if (!$existing) {
 
   db_insert('field_data_field_votes')
     ->fields(array(
@@ -120,7 +123,18 @@ if ($existing === FALSE) {
 }
 else {
 
+  // Update main field table (USED BY VIEWS)
   db_update('field_data_field_votes')
+    ->fields(array(
+      'field_votes_value' => $total_votes
+    ))
+    ->condition('entity_id', $nid)
+    ->condition('entity_type','node')
+    ->condition('bundle','project_idea')
+    ->execute();
+
+  // Update revision table (USED BY NODE REVISIONS)
+  db_update('field_revision_field_votes')
     ->fields(array(
       'field_votes_value' => $total_votes
     ))
@@ -309,4 +323,68 @@ function innovation_hub_node_update($node) {
 
 function innovation_hub_comment_insert($comment) {
   innovation_hub_update_score($comment->nid);
+}
+
+/*
+=========================
+FORM ALTERATION
+Improves Idea Submission Form
+=========================
+*/
+
+function innovation_hub_form_alter(&$form, &$form_state, $form_id) {
+
+  // Modify Project Idea submission form
+  if ($form_id == 'project_idea_node_form') {
+
+    // Add helpful description
+    $form['title']['#description'] = 'Enter a clear and innovative project idea title.';
+
+    // Add placeholder text
+    $form['title']['#attributes']['placeholder'] = 'Example: AI Powered Disaster Prediction System';
+
+    // Improve description field
+    if (isset($form['body'])) {
+      $form['body']['#description'] = 'Describe your idea, its impact, and technologies involved.';
+    }
+
+  }
+
+}
+
+/*
+=========================
+THEME HOOK
+Registers custom template
+=========================
+*/
+
+function innovation_hub_theme() {
+
+  return array(
+
+    'innovation_hub_homepage' => array(
+      'template' => 'innovation-hub-homepage',
+      'variables' => array(
+        'ideas' => NULL,
+        'events' => NULL,
+      ),
+    ),
+
+  );
+
+}
+
+function innovation_hub_views_query_alter(&$view, &$query) {
+  if ($view->name == 'ideas') {
+
+    // Remove existing sort criteria (like post date)
+    $query->orderby = array();
+
+    // Sort by Votes descending
+    $query->orderby[] = array(
+  'field' => 'field_trending_score_value', 
+  'direction' => 'DESC',
+);
+  }
 }

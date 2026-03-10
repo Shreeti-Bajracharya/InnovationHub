@@ -2,7 +2,7 @@
 
 function innovation_hub_analytics_page() {
 
-  $output = '<h2>Innovation Hub Analytics Dashboard</h2>';
+  $output = '<h2>🏠︎</h2>';
 
   /*
   =========================
@@ -118,18 +118,34 @@ function innovation_hub_analytics_page() {
 
   $output .= '
 
-  <h3>Ideas by Technology</h3>
-  <canvas id="techChart"></canvas>
+  <div class="analytics-dashboard">
 
-  <h3>Ideas by Event</h3>
-  <canvas id="eventChart"></canvas>
+<div class="analytics-grid">
 
-  <h3>Monthly Idea Submissions</h3>
-  <canvas id="monthChart"></canvas>
+<div class="analytics-card">
+<h3>Ideas by Technology</h3>
+<canvas id="techChart"></canvas>
+</div>
 
-  '.$contributors.'
+<div class="analytics-card">
+<h3>Ideas by Event</h3>
+<canvas id="eventChart"></canvas>
+</div>
 
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<div class="analytics-card">
+<h3>Monthly Idea Submissions</h3>
+<canvas id="monthChart"></canvas>
+</div>
+
+</div>
+
+<div class="analytics-contributors">
+'.$contributors.'
+</div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
   <script>
 
@@ -194,6 +210,47 @@ function innovation_hub_homepage() {
 'attributes' => array('class' => array('btn','btn-success','btn-lg'))
 )).'
 
+</div>
+';
+
+/*
+========================
+PLATFORM STATS
+========================
+*/
+
+$ideas = db_query("SELECT COUNT(*) FROM {node} WHERE type='project_idea'")->fetchField();
+$events = db_query("SELECT COUNT(*) FROM {node} WHERE type='hackathon_event'")->fetchField();
+$users = db_query("SELECT COUNT(*) FROM {users}")->fetchField();
+$votes = db_query("SELECT COUNT(*) FROM {innovation_hub_votes}")->fetchField();
+
+$output .= '
+
+<div class="platform-stats container">
+
+<div class="row text-center">
+
+<div class="col-md-3 stat-box">
+<h3>'.$ideas.'</h3>
+<p>Ideas Submitted</p>
+</div>
+
+<div class="col-md-3 stat-box">
+<h3>'.$events.'</h3>
+<p>Hackathon Events</p>
+</div>
+
+<div class="col-md-3 stat-box">
+<h3>'.$users.'</h3>
+<p>Community Members</p>
+</div>
+
+<div class="col-md-3 stat-box">
+<h3>'.$votes.'</h3>
+<p>Total Votes</p>
+</div>
+
+</div>
 </div>
 ';
     
