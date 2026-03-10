@@ -1,0 +1,196 @@
+.hero-banner{
+  background:linear-gradient(135deg,#1e3c72,#2a5298);
+  color:white;
+  padding:90px 40px;
+  border-radius:12px;
+  margin-bottom:50px;
+  box-shadow:0 10px 40px rgba(0,0,0,0.15);
+}
+
+.hero-banner h1{
+  font-size:42px;
+  font-weight:700;
+  margin-bottom:15px;
+}
+
+.hero-banner p{
+  font-size:18px;
+  margin-bottom:25px;
+}
+
+.idea-card{
+
+  background:white;
+  border:none;
+  border-radius:16px;
+
+  padding:10px;
+
+  box-shadow:0 8px 30px rgba(0,0,0,0.08);
+
+  transition:all 0.35s ease;
+
+  margin-bottom:35px;
+
+  height:100%;
+
+}
+
+.idea-card:hover{
+
+  transform:translateY(-10px) scale(1.02);
+
+  box-shadow:0 18px 45px rgba(0,0,0,0.18);
+
+}
+
+.card-body{
+
+  padding:25px;
+
+}
+
+.idea-title{
+
+  font-size:22px;
+
+  font-weight:700;
+
+  margin-bottom:12px;
+
+  color:#222;
+
+  min-height:60px;
+
+}
+
+.badge-info{
+
+  background:linear-gradient(135deg,#00c6ff,#0072ff);
+
+  color:white;
+
+  padding:7px 14px;
+
+  border-radius:30px;
+
+  font-size:12px;
+
+  font-weight:600;
+
+}
+
+.idea-stats{
+
+  margin-top:15px;
+
+  font-size:15px;
+
+}
+
+.idea-stats span{
+
+  margin-right:15px;
+
+}
+
+.votes{
+
+  color:#27ae60;
+
+  font-weight:700;
+
+}
+
+.score{
+
+  color:#e67e22;
+
+  font-weight:700;
+
+}
+
+.card-footer{
+
+  background:#f9fafc;
+
+  border-top:1px solid #eee;
+
+  padding:18px;
+
+  text-align:center;
+
+  border-radius:0 0 16px 16px;
+
+}
+.btn-primary{
+
+  background:#007bff;
+
+  border:none;
+
+  border-radius:30px;
+
+  padding:7px 18px;
+
+  font-weight:600;
+
+}
+
+.btn-success{
+
+  background:#28a745;
+
+  border:none;
+
+  border-radius:30px;
+
+  padding:7px 18px;
+
+  font-weight:600;
+
+}
+
+.btn-outline-success{
+
+  border-radius:30px;
+
+}
+
+.event-card{
+
+  border:none;
+
+  border-radius:14px;
+
+  box-shadow:0 6px 25px rgba(0,0,0,0.08);
+
+  transition:all 0.3s ease;
+
+  padding:10px;
+
+}
+
+.event-card:hover{
+
+  transform:translateY(-6px);
+
+  box-shadow:0 15px 35px rgba(0,0,0,0.15);
+
+}
+
+h2{
+
+  font-weight:700;
+
+  margin-bottom:35px;
+
+  color:#222;
+
+}
+
+.row{
+
+  margin-bottom:20px;
+
+}

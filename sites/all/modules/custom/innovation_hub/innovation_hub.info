@@ -1,0 +1,7 @@
+name = Innovation Hub
+description = Custom module for idea voting, analytics and ranking
+core = 7.x
+package = Innovation Hub
+
+dependencies[] = views
+dependencies[] = entity

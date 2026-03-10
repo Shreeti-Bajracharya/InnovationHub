@@ -1,0 +1,13 @@
+name = Entity feature module
+description = Provides some entities in code.
+dependencies[] = entity:entity_test
+core = 7.x
+hidden = TRUE
+
+files[] = entity_feature.module
+
+; Information added by Drupal.org packaging script on 2024-07-14
+version = "7.x-1.11"
+core = "7.x"
+project = "entity"
+datestamp = "1720924769"

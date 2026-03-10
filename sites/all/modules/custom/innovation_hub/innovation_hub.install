@@ -1,0 +1,80 @@
+<?php
+
+/**
+ * @file
+ * Install file for Innovation Hub module.
+ */
+
+/**
+ * Implements hook_schema().
+ * Creates the vote history table.
+ */
+function innovation_hub_schema() {
+  $schema = array();
+
+  // Table to store votes for project ideas.
+  $schema['innovation_hub_votes'] = array(
+    'description' => 'Stores votes for project ideas.',
+    'fields' => array(
+      'vid' => array(
+        'type' => 'serial',
+        'not null' => TRUE,
+      ),
+      'nid' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'description' => 'The node ID of the project idea.',
+      ),
+      'uid' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'description' => 'The user ID of the voter.',
+      ),
+      'created' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'description' => 'Timestamp when the vote was cast.',
+      ),
+    ),
+    'primary key' => array('vid'),
+    'unique keys' => array(
+      // Prevent the same user from voting multiple times for the same idea.
+      'uid_nid' => array('uid', 'nid'),
+    ),
+  );
+
+  return $schema;
+}
+
+/**
+ * Implements hook_install().
+ * Actions performed when module is first installed.
+ */
+function innovation_hub_install() {
+  // Nothing additional needed yet. Table will be created automatically.
+}
+
+/**
+ * Implements hook_uninstall().
+ * Clean up database when module is uninstalled.
+ */
+function innovation_hub_uninstall() {
+  // Drop the votes table when module is uninstalled.
+  drupal_uninstall_schema('innovation_hub_votes');
+}
+
+/**
+ * Update function to create the votes table for existing installs.
+ *
+ * This ensures that sites which installed the module before the table was added
+ * can have the table created via update.php.
+ */
+function innovation_hub_update_8001() {
+  // Check if table already exists to avoid errors.
+  if (!db_table_exists('innovation_hub_votes')) {
+    $schema = drupal_get_schema('innovation_hub_votes', 'innovation_hub');
+    db_create_table('innovation_hub_votes', $schema);
+  }
+
+  return t('innovation_hub_votes table created.');
+}

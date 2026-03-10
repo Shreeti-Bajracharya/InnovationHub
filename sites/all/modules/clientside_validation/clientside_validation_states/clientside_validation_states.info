@@ -1,0 +1,11 @@
+name = Clientside Validation States
+description = Clientside Validation support for From API's #states.
+package = Clientside Validation
+core = 7.x
+
+dependencies[] = clientside_validation_form
+; Information added by Drupal.org packaging script on 2024-06-28
+version = "7.x-1.50"
+core = "7.x"
+project = "clientside_validation"
+datestamp = "1719603109"
