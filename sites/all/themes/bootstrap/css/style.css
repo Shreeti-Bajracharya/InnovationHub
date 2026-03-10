@@ -286,3 +286,41 @@ text-align:center;
 margin-bottom:40px;
 }
 
+/* ===============================
+UPCOMING HACKATHONS
+=============================== */
+
+.event-card{
+background:white;
+border-radius:18px;
+padding:0;
+box-shadow:0 10px 35px rgba(0,0,0,0.08);
+transition:all 0.35s ease;
+margin-bottom:30px;
+overflow:hidden;
+text-align:center;
+}
+
+.event-card:hover{
+transform:translateY(-8px);
+box-shadow:0 20px 50px rgba(0,0,0,0.18);
+}
+
+.event-title{
+font-size:20px;
+font-weight:700;
+margin-bottom:8px;
+color:#222;
+}
+
+.event-meta{
+font-size:14px;
+color:#777;
+margin-bottom:10px;
+}
+
+.event-card .card-footer{
+background:#f9fafc;
+border-top:1px solid #eee;
+padding:18px;
+}

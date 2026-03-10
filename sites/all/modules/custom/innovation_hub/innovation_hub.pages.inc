@@ -372,23 +372,29 @@ foreach ($result as $event) {
 
   $output .= '
 
-  <div class="col-md-4">
+<div class="col-md-4">
 
-    <div class="card event-card">
+  <div class="card event-card">
 
-      <div class="card-body">
+    <div class="card-body text-center">
 
-        <h4>'.check_plain($event->title).'</h4>
+      <h4 class="event-title">'.check_plain($event->title).'</h4>
 
-        '.$event_link.'
-
+      <div class="event-meta">
+        Upcoming Hackathon
       </div>
 
     </div>
 
+    <div class="card-footer text-center">
+      '.$event_link.'
+    </div>
+
   </div>
 
-  ';
+</div>
+
+';
 }
 
 $output .= '</div>';
