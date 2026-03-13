@@ -2,6 +2,17 @@ name = Innovation Hub
 description = Custom module for idea voting, analytics and ranking
 core = 7.x
 package = Innovation Hub
+version = 7.x-1.0
+author = Your Name
 
+dependencies[] = node
+dependencies[] = field
 dependencies[] = views
 dependencies[] = entity
+dependencies[] = ctools
+dependencies[] = taxonomy
+
+; Register test file
+files[] = innovation_hub.module
+files[] = innovation_hub.pages.inc
+files[] = innovation_hub.test

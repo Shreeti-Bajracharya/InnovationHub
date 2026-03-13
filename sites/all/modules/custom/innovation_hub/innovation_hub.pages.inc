@@ -219,8 +219,8 @@ PLATFORM STATS
 ========================
 */
 
-$ideas = db_query("SELECT COUNT(*) FROM {node} WHERE type='project_idea'")->fetchField();
-$events = db_query("SELECT COUNT(*) FROM {node} WHERE type='hackathon_event'")->fetchField();
+$ideas = db_query("SELECT COUNT(*) FROM {node} WHERE type='project_idea' AND status=1")->fetchField();
+$events = db_query("SELECT COUNT(*) FROM {node} WHERE type='hackathon_event' AND status=1")->fetchField();
 $users = db_query("SELECT COUNT(*) FROM {users}")->fetchField();
 $votes = db_query("SELECT COUNT(*) FROM {innovation_hub_votes}")->fetchField();
 
@@ -256,32 +256,35 @@ $output .= '
     
 /*
 ========================
-TRENDING IDEAS
+TRENDING IDEAS (APPROVED ONLY) ✅ FIXED
 ========================
 */
 
 $result = db_query("
   SELECT n.nid, n.title,
-v.field_votes_value,
-s.field_trending_score_value,
-t.name AS difficulty
-FROM {node} n
-LEFT JOIN {field_data_field_votes} v
-  ON n.nid = v.entity_id
-LEFT JOIN {field_data_field_trending_score} s
-  ON n.nid = s.entity_id
-LEFT JOIN {field_data_field_difficulty} d
-  ON n.nid = d.entity_id
-LEFT JOIN {taxonomy_term_data} t
-  ON d.field_difficulty_tid = t.tid
-WHERE n.type='project_idea'
-AND n.status = 1
-ORDER BY s.field_trending_score_value DESC
-LIMIT 6
+         v.field_votes_value,
+         s.field_trending_score_value,
+         t.name AS difficulty
+  FROM {node} n
+  LEFT JOIN {field_data_field_votes} v
+    ON n.nid = v.entity_id
+  LEFT JOIN {field_data_field_trending_score} s
+    ON n.nid = s.entity_id
+  LEFT JOIN {field_data_field_difficulty} d
+    ON n.nid = d.entity_id
+  LEFT JOIN {taxonomy_term_data} t
+    ON d.field_difficulty_tid = t.tid
+  LEFT JOIN {field_data_field_status} fs
+    ON n.nid = fs.entity_id
+  WHERE n.type='project_idea'
+  AND n.status = 1
+  AND fs.field_status_value = 'Approved'
+  ORDER BY s.field_trending_score_value DESC
+  LIMIT 6
 ");
 
 $output .= '<div class="container">';
-$output .= '<h2 class="text-center mb-4">Trending Ideas</h2>';
+$output .= '<h2 class="text-center mb-4">🔥 Trending Ideas</h2>';
 $output .= '<div class="row">';
 
 foreach ($result as $row) {
@@ -316,11 +319,11 @@ foreach ($result as $row) {
         <div class="idea-stats">
 
           <span class="votes">
-            '.$votes.' Votes
+            👍 '.$votes.' Votes
           </span>
 
           <span class="score">
-            '.$score.' Score
+            🔥 '.$score.' Score
           </span>
 
         </div>
@@ -342,9 +345,10 @@ foreach ($result as $row) {
 }
 
 $output .= '</div>';
+
 /*
 ========================
-UPCOMING EVENTS
+UPCOMING EVENTS (APPROVED ONLY)
 ========================
 */
 
@@ -354,6 +358,7 @@ FROM {node} n
 JOIN {field_data_field_event_status} s
 ON n.nid = s.entity_id
 WHERE n.type='hackathon_event'
+AND n.status = 1
 AND s.field_event_status_value='approved'
 ORDER BY n.created DESC
 LIMIT 3
@@ -425,8 +430,8 @@ labels:["Ideas","Events","Users"],
 datasets:[{
 label:"Platform Data",
 data:[
-'.db_query("SELECT COUNT(*) FROM {node} WHERE type='project_idea'")->fetchField().',
-'.db_query("SELECT COUNT(*) FROM {node} WHERE type='hackathon_event'")->fetchField().',
+'.db_query("SELECT COUNT(*) FROM {node} WHERE type='project_idea' AND status=1")->fetchField().',
+'.db_query("SELECT COUNT(*) FROM {node} WHERE type='hackathon_event' AND status=1")->fetchField().',
 '.db_query("SELECT COUNT(*) FROM {users}")->fetchField().'
 ]
 }]

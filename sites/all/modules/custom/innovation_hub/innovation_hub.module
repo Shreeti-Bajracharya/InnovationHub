@@ -1,6 +1,11 @@
 <?php
 
 /**
+ * @file
+ * Innovation Hub - Idea voting, trending algorithm, and analytics
+ */
+
+/**
  * Implements hook_menu()
  */
 function innovation_hub_menu() {
@@ -29,7 +34,7 @@ function innovation_hub_menu() {
     'page callback' => 'innovation_hub_vote',
     'page arguments' => array(1),
     'access callback' => 'user_is_logged_in',
-'access arguments' => array(),
+    'access arguments' => array(),
     'type' => MENU_CALLBACK,
   );
 
@@ -57,6 +62,10 @@ function innovation_hub_menu() {
   return $items;
 }
 
+/**
+ * Implements hook_menu() - Vote callback
+ * Handles idea voting with security checks
+ */
 function innovation_hub_vote($nid) {
   global $user;
 
@@ -65,12 +74,20 @@ function innovation_hub_vote($nid) {
     drupal_not_found();
   }
 
+  // ✅ CHECK IF IDEA IS APPROVED (Security Check #1)
+  if (!empty($node->field_status['und'][0]['value']) && 
+      $node->field_status['und'][0]['value'] != 'Approved') {
+    drupal_set_message('This idea has not been approved yet.', 'warning');
+    drupal_access_denied();
+  }
+
+  // ✅ PREVENT SELF-VOTING (Security Check #2)
   if ($node->uid == $user->uid) {
     drupal_set_message('You cannot vote for your own idea.', 'warning');
     drupal_goto('node/'.$nid);
   }
 
-  // Check if user already voted
+  // ✅ PREVENT DUPLICATE VOTES (Security Check #3)
   $exists = db_query("
     SELECT 1
     FROM {innovation_hub_votes}
@@ -82,7 +99,7 @@ function innovation_hub_vote($nid) {
     drupal_goto('node/'.$nid);
   }
 
-  // Record the vote
+  // ✅ RECORD THE VOTE
   db_insert('innovation_hub_votes')
     ->fields(array(
       'uid' => $user->uid,
@@ -91,102 +108,112 @@ function innovation_hub_vote($nid) {
     ))
     ->execute();
 
-  // --- SYNC field_votes_value ---
+  // ✅ SYNC field_votes_value (For Views compatibility)
   $total_votes = db_query("
     SELECT COUNT(*) FROM {innovation_hub_votes} WHERE nid = :nid
   ", array(':nid' => $nid))->fetchField();
 
   $existing = db_query("
-SELECT entity_id
-FROM {field_data_field_votes}
-WHERE entity_id = :nid
-AND entity_type='node'
-AND bundle='project_idea'
-AND deleted=0
-", array(':nid'=>$nid))->fetchField();
+    SELECT entity_id
+    FROM {field_data_field_votes}
+    WHERE entity_id = :nid
+    AND entity_type='node'
+    AND bundle='project_idea'
+    AND deleted=0
+  ", array(':nid'=>$nid))->fetchField();
 
-if (!$existing) {
+  if (!$existing) {
+    // Insert new field row if it doesn't exist
+    db_insert('field_data_field_votes')
+      ->fields(array(
+        'entity_type' => 'node',
+        'bundle' => 'project_idea',
+        'deleted' => 0,
+        'entity_id' => $nid,
+        'revision_id' => $nid,
+        'language' => 'und',
+        'delta' => 0,
+        'field_votes_value' => $total_votes
+      ))
+      ->execute();
+  } else {
+    // Update main field table (USED BY VIEWS)
+    db_update('field_data_field_votes')
+      ->fields(array(
+        'field_votes_value' => $total_votes
+      ))
+      ->condition('entity_id', $nid)
+      ->condition('entity_type','node')
+      ->condition('bundle','project_idea')
+      ->execute();
 
-  db_insert('field_data_field_votes')
-    ->fields(array(
-      'entity_type' => 'node',
-      'bundle' => 'project_idea',
-      'deleted' => 0,
-      'entity_id' => $nid,
-      'revision_id' => $nid,
-      'language' => 'und',
-      'delta' => 0,
-      'field_votes_value' => $total_votes
-    ))
-    ->execute();
+    // Update revision table (USED BY NODE REVISIONS)
+    db_update('field_revision_field_votes')
+      ->fields(array(
+        'field_votes_value' => $total_votes
+      ))
+      ->condition('entity_id', $nid)
+      ->execute();
+  }
 
-}
-else {
-
-  // Update main field table (USED BY VIEWS)
-  db_update('field_data_field_votes')
-    ->fields(array(
-      'field_votes_value' => $total_votes
-    ))
-    ->condition('entity_id', $nid)
-    ->condition('entity_type','node')
-    ->condition('bundle','project_idea')
-    ->execute();
-
-  // Update revision table (USED BY NODE REVISIONS)
-  db_update('field_revision_field_votes')
-    ->fields(array(
-      'field_votes_value' => $total_votes
-    ))
-    ->condition('entity_id', $nid)
-    ->execute();
-
-}
-
-  // --- UPDATE TRENDING SCORE ---
+  // ✅ UPDATE TRENDING SCORE
   innovation_hub_update_score($nid);
+
+  watchdog('innovation_hub', 'User %uid voted for idea %nid', array('%uid' => $user->uid, '%nid' => $nid));
 
   drupal_set_message('Your vote has been recorded.');
   drupal_goto('node/' . $nid);
 }
 
 /**
- * Trending ideas block
+ * Implements hook_block_info()
+ * Defines the Trending Ideas block
  */
 function innovation_hub_block_info() {
-  $blocks['trending_ideas'] = array('info' => t('Trending Ideas'));
+  $blocks['trending_ideas'] = array(
+    'info' => t('Trending Ideas'),
+    'cache' => DRUPAL_CACHE_GLOBAL,
+  );
   return $blocks;
 }
 
+/**
+ * Implements hook_block_view()
+ * Renders the Trending Ideas block
+ * ✅ ONLY SHOWS APPROVED IDEAS
+ */
 function innovation_hub_block_view($delta = '') {
   $block = array();
 
   if ($delta == 'trending_ideas') {
 
+    // ✅ FIXED QUERY - ONLY APPROVED IDEAS
     $result = db_query("
-SELECT n.nid, n.title,
-v.field_votes_value,
-s.field_trending_score_value,
-t.name AS difficulty
-FROM {node} n
-LEFT JOIN {field_data_field_votes} v
-ON n.nid = v.entity_id
-LEFT JOIN {field_data_field_trending_score} s
-ON n.nid = s.entity_id
-LEFT JOIN {field_data_field_difficulty} d
-ON n.nid = d.entity_id
-LEFT JOIN {taxonomy_term_data} t
-ON d.field_difficulty_tid = t.tid
-WHERE n.type='project_idea'
-AND n.status = 1
-ORDER BY s.field_trending_score_value DESC
-LIMIT 5
-");
+      SELECT n.nid, n.title,
+             v.field_votes_value,
+             s.field_trending_score_value,
+             t.name AS difficulty
+      FROM {node} n
+      LEFT JOIN {field_data_field_votes} v
+        ON n.nid = v.entity_id
+      LEFT JOIN {field_data_field_trending_score} s
+        ON n.nid = s.entity_id
+      LEFT JOIN {field_data_field_difficulty} d
+        ON n.nid = d.entity_id
+      LEFT JOIN {taxonomy_term_data} t
+        ON d.field_difficulty_tid = t.tid
+      LEFT JOIN {field_data_field_status} fs
+        ON n.nid = fs.entity_id
+      WHERE n.type='project_idea'
+      AND n.status = 1
+      AND fs.field_status_value = 'Approved'
+      ORDER BY s.field_trending_score_value DESC
+      LIMIT 5
+    ");
 
     $items = array();
 
     foreach ($result as $row) {
-
       $votes = $row->field_votes_value ? $row->field_votes_value : 0;
       $score = $row->field_trending_score_value ? $row->field_trending_score_value : 0;
 
@@ -194,14 +221,18 @@ LIMIT 5
         <div class="idea-card">
           <a href="'.url('node/'.$row->nid).'">'.check_plain($row->title).'</a>
           <div class="idea-stats">
-            <span class="votes">'.$votes.' Votes</span>
-            <span class="score">'.$score.' Score</span>
+            <span class="votes">👍 '.$votes.' Votes</span>
+            <span class="score">🔥 '.$score.' Score</span>
           </div>
         </div>
       ';
     }
 
-    $block['subject'] = 'Trending Ideas';
+    if (empty($items)) {
+      $items[] = '<p>No trending ideas yet.</p>';
+    }
+
+    $block['subject'] = t('Trending Ideas');
     $block['content'] = array('#markup' => implode('', $items));
   }
 
@@ -209,16 +240,24 @@ LIMIT 5
 }
 
 /**
- * Log idea submissions
+ * Implements hook_node_insert()
+ * Actions when idea or event is created
  */
 function innovation_hub_node_insert($node) {
 
   if ($node->type == 'project_idea') {
-    watchdog('innovation_hub', 'New idea submitted: %title', array('%title' => $node->title));
+    // Set default status to Pending for new ideas
+    db_update('field_data_field_status')
+      ->fields(array('field_status_value' => 'Pending'))
+      ->condition('entity_id', $node->nid)
+      ->execute();
+
+    watchdog('innovation_hub', 'New idea submitted: %title (Status: Pending)', array('%title' => $node->title));
     innovation_hub_update_score($node->nid);
   }
 
   if ($node->type == 'hackathon_event') {
+    // Set default status to Pending for new events
     db_update('field_data_field_event_status')
       ->fields(array('field_event_status_value' => 'pending'))
       ->condition('entity_id', $node->nid)
@@ -226,59 +265,83 @@ function innovation_hub_node_insert($node) {
 
     watchdog('innovation_hub', 'New event submitted and set to pending: %title', array('%title' => $node->title));
   }
-
 }
 
 /**
  * Implements hook_node_view()
+ * Adds vote button to idea page
  */
 function innovation_hub_node_view($node, $view_mode, $langcode) {
 
   if ($node->type == 'project_idea') {
-    $vote_link = l(
-      'Vote',
-      'idea/'.$node->nid.'/vote',
-      array('attributes' => array('class' => array('btn','btn-success','btn-sm')))
-    );
+    // Check if idea is approved before showing vote button
+    $is_approved = FALSE;
+    if (!empty($node->field_status['und'][0]['value']) && 
+        $node->field_status['und'][0]['value'] == 'Approved') {
+      $is_approved = TRUE;
+    }
 
-    $node->content['vote_button'] = array(
-      '#markup' => '<div class="idea-vote">'.$vote_link.'</div>',
-      '#weight' => 10,
-    );
+    if ($is_approved) {
+      $vote_link = l(
+        '👍 Vote',
+        'idea/'.$node->nid.'/vote',
+        array('attributes' => array('class' => array('btn','btn-success','btn-sm')))
+      );
+
+      $node->content['vote_button'] = array(
+        '#markup' => '<div class="idea-vote">'.$vote_link.'</div>',
+        '#weight' => 10,
+      );
+    }
   }
-
 }
 
 /**
- * Calculate score for an idea
+ * Calculates trending score for an idea
+ * Formula: (votes × 2) + comments + recency_bonus
  */
 function innovation_hub_calculate_score($nid) {
 
-  $created = db_query("SELECT created FROM {node} WHERE nid = :nid", array(':nid'=>$nid))->fetchField();
-if (!$created) return 0;
+  $created = db_query("
+    SELECT created FROM {node} WHERE nid = :nid
+  ", array(':nid'=>$nid))->fetchField();
+  
+  if (!$created) {
+    return 0;
+  }
 
   // Votes from field_votes_value (matches Ideas page)
-  $votes = db_query("SELECT field_votes_value FROM {field_data_field_votes} WHERE entity_id = :nid", array(':nid'=>$nid))->fetchField();
+  $votes = db_query("
+    SELECT field_votes_value 
+    FROM {field_data_field_votes} 
+    WHERE entity_id = :nid
+  ", array(':nid'=>$nid))->fetchField();
   $votes = $votes ? $votes : 0;
 
   // Comments
-  $comments = db_query("SELECT COUNT(*) FROM {comment} WHERE nid = :nid", array(':nid'=>$nid))->fetchField();
+  $comments = db_query("
+    SELECT COUNT(*) FROM {comment} WHERE nid = :nid
+  ", array(':nid'=>$nid))->fetchField();
   $comments = $comments ? $comments : 0;
 
-  // Recency bonus (smaller to avoid dominating)
+  // Recency bonus (in days since creation)
   $days_old = (REQUEST_TIME - $created) / 86400;
-  if ($days_old <= 3) $recency_bonus = 3;
-  elseif ($days_old <= 7) $recency_bonus = 1;
-  else $recency_bonus = 0;
+  if ($days_old <= 3) {
+    $recency_bonus = 3;
+  } elseif ($days_old <= 7) {
+    $recency_bonus = 1;
+  } else {
+    $recency_bonus = 0;
+  }
 
-  // Final score
+  // Final score formula
   $score = ($votes * 2) + $comments + $recency_bonus;
 
   return $score;
 }
 
 /**
- * Update trending score (insert if missing)
+ * Updates trending score (insert if missing, update if exists)
  */
 function innovation_hub_update_score($nid) {
 
@@ -291,6 +354,7 @@ function innovation_hub_update_score($nid) {
   ", array(':nid'=>$nid))->fetchField();
 
   if ($existing === FALSE) {
+    // Insert new trending score row
     db_insert('field_data_field_trending_score')
       ->fields(array(
         'entity_type' => 'node',
@@ -303,9 +367,15 @@ function innovation_hub_update_score($nid) {
         'field_trending_score_value' => $score
       ))
       ->execute();
-  }
-  else {
+  } else {
+    // Update existing trending score
     db_update('field_data_field_trending_score')
+      ->fields(array('field_trending_score_value' => $score))
+      ->condition('entity_id', $nid)
+      ->execute();
+
+    // Also update revision table
+    db_update('field_revision_field_trending_score')
       ->fields(array('field_trending_score_value' => $score))
       ->condition('entity_id', $nid)
       ->execute();
@@ -313,7 +383,8 @@ function innovation_hub_update_score($nid) {
 }
 
 /**
- * Update score when idea or comment is updated
+ * Implements hook_node_update()
+ * Updates score when idea is edited
  */
 function innovation_hub_node_update($node) {
   if ($node->type == 'project_idea') {
@@ -321,70 +392,99 @@ function innovation_hub_node_update($node) {
   }
 }
 
+/**
+ * Implements hook_comment_insert()
+ * Updates score when comment is added
+ */
 function innovation_hub_comment_insert($comment) {
   innovation_hub_update_score($comment->nid);
 }
 
-/*
-=========================
-FORM ALTERATION
-Improves Idea Submission Form
-=========================
-*/
-
+/**
+ * Implements hook_form_alter()
+ * Improves Idea Submission Form
+ */
 function innovation_hub_form_alter(&$form, &$form_state, $form_id) {
 
   // Modify Project Idea submission form
   if ($form_id == 'project_idea_node_form') {
 
-    // Add helpful description
-    $form['title']['#description'] = 'Enter a clear and innovative project idea title.';
+    // Add helpful description to title
+    $form['title']['#description'] = t('Enter a clear and innovative project idea title.');
 
     // Add placeholder text
-    $form['title']['#attributes']['placeholder'] = 'Example: AI Powered Disaster Prediction System';
+    if (!isset($form['title']['#attributes'])) {
+      $form['title']['#attributes'] = array();
+    }
+    $form['title']['#attributes']['placeholder'] = t('Example: AI Powered Disaster Prediction System');
 
-    // Improve description field
+    // Improve description field (body)
     if (isset($form['body'])) {
-      $form['body']['#description'] = 'Describe your idea, its impact, and technologies involved.';
+      $form['body'][LANGUAGE_NONE][0]['#description'] = t('Describe your idea, its impact, and technologies involved.');
     }
 
+    // Add helpful message about approval
+    if (isset($form['status'])) {
+      $form['status']['widget']['#description'] = t('Your idea will be pending approval by an administrator before appearing publicly.');
+    }
   }
-
 }
 
-/*
-=========================
-THEME HOOK
-Registers custom template
-=========================
-*/
-
+/**
+ * Implements hook_theme()
+ * Registers custom theme hooks and templates
+ */
 function innovation_hub_theme() {
-
   return array(
-
     'innovation_hub_homepage' => array(
       'template' => 'innovation-hub-homepage',
       'variables' => array(
         'ideas' => NULL,
         'events' => NULL,
+        'stats' => NULL,
       ),
     ),
-
   );
-
 }
 
+/**
+ * Implements hook_views_query_alter()
+ * Modifies Views queries for Ideas view
+ */
 function innovation_hub_views_query_alter(&$view, &$query) {
+  
+  // Modify the Ideas view to sort by trending score
   if ($view->name == 'ideas') {
-
-    // Remove existing sort criteria (like post date)
+    // Clear existing sort criteria
     $query->orderby = array();
 
-    // Sort by Votes descending
+    // Sort by trending score (descending - highest first)
     $query->orderby[] = array(
-  'field' => 'field_trending_score_value', 
-  'direction' => 'DESC',
-);
+      'field' => 'field_trending_score_value', 
+      'direction' => 'DESC',
+    );
   }
 }
+
+/**
+ * Implements hook_simpletest_alter().
+ */
+function innovation_hub_simpletest_alter(&$tests) {
+  // Get module path
+  $module_path = drupal_get_path('module', 'innovation_hub');
+  $test_file = $module_path . '/innovation_hub.test';
+  
+  // Only proceed if test file exists
+  if (!file_exists($test_file)) {
+    return;
+  }
+  
+  // Include the test file
+  require_once $test_file;
+  
+  // Register each test class
+  if (class_exists('InnovationHubTest')) {
+    $tests['InnovationHubTest'] = $test_file;
+  }
+}
+?>
