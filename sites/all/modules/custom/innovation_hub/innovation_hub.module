@@ -3,6 +3,16 @@
 /**
  * @file
  * Innovation Hub - Idea voting, trending algorithm, and analytics
+ * 
+ * IMPROVEMENTS IN THIS VERSION:
+ * - Transaction safety for critical operations
+ * - Cache invalidation after votes/approvals (with safety checks)
+ * - Rate limiting to prevent voting abuse
+ * - Better error handling and logging
+ * - Comment visibility filtering
+ * - Consistent revision table updates
+ * - Improved performance with indexes
+ * - SAFE cache operations (checks if table exists)
  */
 
 /**
@@ -64,7 +74,20 @@ function innovation_hub_menu() {
 
 /**
  * Implements hook_menu() - Vote callback
- * Handles idea voting with security checks
+ * Handles idea voting with comprehensive security checks
+ * 
+ * SECURITY CHECKS:
+ * 1. Login required
+ * 2. Idea must be approved
+ * 3. Cannot self-vote
+ * 4. Cannot vote twice
+ * 5. Rate limiting (max 10 votes per hour)
+ * 
+ * IMPROVEMENTS:
+ * - Transaction safety for data consistency
+ * - Cache invalidation after vote (SAFE)
+ * - Proper error handling
+ * - Revision table synchronization
  */
 function innovation_hub_vote($nid) {
   global $user;
@@ -72,22 +95,30 @@ function innovation_hub_vote($nid) {
   $node = node_load($nid);
   if (!$node || $node->type != 'project_idea') {
     drupal_not_found();
+    return;
   }
 
-  // ✅ CHECK IF IDEA IS APPROVED (Security Check #1)
+  // Security Check #1: VERIFY IDEA IS APPROVED
+  $is_approved = FALSE;
   if (!empty($node->field_status['und'][0]['value']) && 
-      $node->field_status['und'][0]['value'] != 'Approved') {
+      $node->field_status['und'][0]['value'] == 'Approved') {
+    $is_approved = TRUE;
+  }
+
+  if (!$is_approved) {
     drupal_set_message('This idea has not been approved yet.', 'warning');
     drupal_access_denied();
+    return;
   }
 
-  // ✅ PREVENT SELF-VOTING (Security Check #2)
+  // Security Check #2: PREVENT SELF-VOTING
   if ($node->uid == $user->uid) {
     drupal_set_message('You cannot vote for your own idea.', 'warning');
     drupal_goto('node/'.$nid);
+    return;
   }
 
-  // ✅ PREVENT DUPLICATE VOTES (Security Check #3)
+  // Security Check #3: PREVENT DUPLICATE VOTES
   $exists = db_query("
     SELECT 1
     FROM {innovation_hub_votes}
@@ -97,72 +128,173 @@ function innovation_hub_vote($nid) {
   if ($exists) {
     drupal_set_message('You have already voted for this idea.', 'warning');
     drupal_goto('node/'.$nid);
+    return;
   }
 
-  // ✅ RECORD THE VOTE
-  db_insert('innovation_hub_votes')
-    ->fields(array(
-      'uid' => $user->uid,
-      'nid' => $nid,
-      'created' => REQUEST_TIME,
-    ))
-    ->execute();
-
-  // ✅ SYNC field_votes_value (For Views compatibility)
-  $total_votes = db_query("
-    SELECT COUNT(*) FROM {innovation_hub_votes} WHERE nid = :nid
-  ", array(':nid' => $nid))->fetchField();
-
-  $existing = db_query("
-    SELECT entity_id
-    FROM {field_data_field_votes}
-    WHERE entity_id = :nid
-    AND entity_type='node'
-    AND bundle='project_idea'
-    AND deleted=0
-  ", array(':nid'=>$nid))->fetchField();
-
-  if (!$existing) {
-    // Insert new field row if it doesn't exist
-    db_insert('field_data_field_votes')
-      ->fields(array(
-        'entity_type' => 'node',
-        'bundle' => 'project_idea',
-        'deleted' => 0,
-        'entity_id' => $nid,
-        'revision_id' => $nid,
-        'language' => 'und',
-        'delta' => 0,
-        'field_votes_value' => $total_votes
-      ))
-      ->execute();
-  } else {
-    // Update main field table (USED BY VIEWS)
-    db_update('field_data_field_votes')
-      ->fields(array(
-        'field_votes_value' => $total_votes
-      ))
-      ->condition('entity_id', $nid)
-      ->condition('entity_type','node')
-      ->condition('bundle','project_idea')
-      ->execute();
-
-    // Update revision table (USED BY NODE REVISIONS)
-    db_update('field_revision_field_votes')
-      ->fields(array(
-        'field_votes_value' => $total_votes
-      ))
-      ->condition('entity_id', $nid)
-      ->execute();
+  // Security Check #4: RATE LIMITING (Max 10 votes per hour)
+  if (innovation_hub_check_vote_rate_limit($user->uid)) {
+    drupal_set_message('You are voting too frequently. Please wait before voting again.', 'warning');
+    drupal_goto('node/'.$nid);
+    return;
   }
 
-  // ✅ UPDATE TRENDING SCORE
-  innovation_hub_update_score($nid);
+  // ✅ WRAP IN TRANSACTION FOR SAFETY
+  $transaction = db_transaction();
+  try {
+    // Record the vote in custom table
+    db_insert('innovation_hub_votes')
+      ->fields(array(
+        'uid' => $user->uid,
+        'nid' => $nid,
+        'created' => REQUEST_TIME,
+      ))
+      ->execute();
 
-  watchdog('innovation_hub', 'User %uid voted for idea %nid', array('%uid' => $user->uid, '%nid' => $nid));
+    // Sync field_votes_value (For Views compatibility)
+    $total_votes = db_query("
+      SELECT COUNT(*) FROM {innovation_hub_votes} WHERE nid = :nid
+    ", array(':nid' => $nid))->fetchField();
 
-  drupal_set_message('Your vote has been recorded.');
+    // Check if field row exists
+    $existing = db_query("
+      SELECT entity_id
+      FROM {field_data_field_votes}
+      WHERE entity_id = :nid
+      AND entity_type='node'
+      AND bundle='project_idea'
+      AND deleted=0
+    ", array(':nid'=>$nid))->fetchField();
+
+    if (!$existing) {
+      // Insert new field row if it doesn't exist
+      db_insert('field_data_field_votes')
+        ->fields(array(
+          'entity_type' => 'node',
+          'bundle' => 'project_idea',
+          'deleted' => 0,
+          'entity_id' => $nid,
+          'revision_id' => $nid,
+          'language' => 'und',
+          'delta' => 0,
+          'field_votes_value' => $total_votes
+        ))
+        ->execute();
+    } else {
+      // Update main field table (USED BY VIEWS)
+      db_update('field_data_field_votes')
+        ->fields(array(
+          'field_votes_value' => $total_votes
+        ))
+        ->condition('entity_id', $nid)
+        ->condition('entity_type','node')
+        ->condition('bundle','project_idea')
+        ->execute();
+
+      // Update revision table (USED BY NODE REVISIONS)
+      db_update('field_revision_field_votes')
+        ->fields(array(
+          'field_votes_value' => $total_votes
+        ))
+        ->condition('entity_id', $nid)
+        ->execute();
+    }
+
+    // Update trending score
+    innovation_hub_update_score($nid);
+
+    // ✅ CLEAR CACHE AFTER VOTE (SAFE)
+    innovation_hub_clear_trending_cache();
+
+    watchdog('innovation_hub', 'User %uid voted for idea %nid', 
+      array('%uid' => $user->uid, '%nid' => $nid), WATCHDOG_NOTICE);
+    drupal_set_message('Your vote has been recorded.');
+
+  } catch (Exception $e) {
+    // Rollback transaction on error
+    $transaction->rollback();
+    watchdog('innovation_hub', 'Vote failed for idea %nid: %error', 
+      array('%nid' => $nid, '%error' => $e->getMessage()), WATCHDOG_ERROR);
+    drupal_set_message('An error occurred while processing your vote. Please try again.', 'error');
+  }
+
   drupal_goto('node/' . $nid);
+}
+
+/**
+ * Check if user has exceeded voting rate limit
+ * Max 10 votes per hour
+ * 
+ * SAFE: Checks if cache table exists before using cache_get
+ * Falls back to direct database query if cache table doesn't exist
+ * 
+ * @param int $uid User ID
+ * @return bool TRUE if limit exceeded, FALSE otherwise
+ */
+function innovation_hub_check_vote_rate_limit($uid) {
+  try {
+    $cache_key = 'innovation_hub_votes_count:' . $uid;
+    $one_hour_ago = REQUEST_TIME - 3600;
+    
+    // Try to use cache if table exists
+    if (db_table_exists('cache_innovation_hub')) {
+      $vote_count = cache_get($cache_key, 'cache_innovation_hub');
+      
+      if (!$vote_count) {
+        $count = db_query("
+          SELECT COUNT(*) FROM {innovation_hub_votes}
+          WHERE uid = :uid AND created > :time
+        ", array(':uid' => $uid, ':time' => $one_hour_ago))->fetchField();
+        
+        cache_set($cache_key, $count, 'cache_innovation_hub', REQUEST_TIME + 3600);
+        return $count >= 10;
+      }
+      
+      return $vote_count->data >= 10;
+    } else {
+      // Fall back to direct database query if cache table doesn't exist
+      $count = db_query("
+        SELECT COUNT(*) FROM {innovation_hub_votes}
+        WHERE uid = :uid AND created > :time
+      ", array(':uid' => $uid, ':time' => $one_hour_ago))->fetchField();
+      
+      return $count >= 10;
+    }
+  } catch (Exception $e) {
+    watchdog('innovation_hub', 'Error checking rate limit for user %uid: %error', 
+      array('%uid' => $uid, '%error' => $e->getMessage()), WATCHDOG_WARNING);
+    // Default to allowing vote if there's an error
+    return FALSE;
+  }
+}
+
+/**
+ * Clear trending ideas block cache
+ * Called after votes, approvals, or score updates
+ * 
+ * SAFE: Checks if cache table exists before clearing
+ * Handles missing tables gracefully
+ */
+function innovation_hub_clear_trending_cache() {
+  try {
+    // Clear Views cache
+    if (function_exists('views_invalidate_cache')) {
+      views_invalidate_cache();
+    }
+    
+    // Clear block cache
+    cache_clear_all('innovation_hub_votes:*', 'cache_block', TRUE);
+    
+    // Clear innovation hub cache bin ONLY if table exists
+    if (db_table_exists('cache_innovation_hub')) {
+      cache_clear_all(NULL, 'cache_innovation_hub');
+    }
+    
+    watchdog('innovation_hub', 'Cache cleared for trending ideas', array(), WATCHDOG_DEBUG);
+  } catch (Exception $e) {
+    watchdog('innovation_hub', 'Error clearing cache: %error', 
+      array('%error' => $e->getMessage()), WATCHDOG_WARNING);
+    // Don't fail if cache clearing fails
+  }
 }
 
 /**
@@ -181,59 +313,74 @@ function innovation_hub_block_info() {
  * Implements hook_block_view()
  * Renders the Trending Ideas block
  * ✅ ONLY SHOWS APPROVED IDEAS
+ * ✅ SAFELY ESCAPED OUTPUT
  */
 function innovation_hub_block_view($delta = '') {
   $block = array();
 
   if ($delta == 'trending_ideas') {
 
-    // ✅ FIXED QUERY - ONLY APPROVED IDEAS
-    $result = db_query("
-      SELECT n.nid, n.title,
-             v.field_votes_value,
-             s.field_trending_score_value,
-             t.name AS difficulty
-      FROM {node} n
-      LEFT JOIN {field_data_field_votes} v
-        ON n.nid = v.entity_id
-      LEFT JOIN {field_data_field_trending_score} s
-        ON n.nid = s.entity_id
-      LEFT JOIN {field_data_field_difficulty} d
-        ON n.nid = d.entity_id
-      LEFT JOIN {taxonomy_term_data} t
-        ON d.field_difficulty_tid = t.tid
-      LEFT JOIN {field_data_field_status} fs
-        ON n.nid = fs.entity_id
-      WHERE n.type='project_idea'
-      AND n.status = 1
-      AND fs.field_status_value = 'Approved'
-      ORDER BY s.field_trending_score_value DESC
-      LIMIT 5
-    ");
+    // ✅ FIXED QUERY - ONLY APPROVED IDEAS WITH PROPER JOINS
+    try {
+      $result = db_query("
+        SELECT n.nid, n.title,
+               v.field_votes_value,
+               s.field_trending_score_value,
+               t.name AS difficulty
+        FROM {node} n
+        LEFT JOIN {field_data_field_votes} v
+          ON n.nid = v.entity_id
+        LEFT JOIN {field_data_field_trending_score} s
+          ON n.nid = s.entity_id
+        LEFT JOIN {field_data_field_difficulty} d
+          ON n.nid = d.entity_id
+        LEFT JOIN {taxonomy_term_data} t
+          ON d.field_difficulty_tid = t.tid
+        LEFT JOIN {field_data_field_status} fs
+          ON n.nid = fs.entity_id
+        WHERE n.type='project_idea'
+        AND n.status = 1
+        AND fs.field_status_value = 'Approved'
+        ORDER BY s.field_trending_score_value DESC
+        LIMIT 5
+      ");
 
-    $items = array();
+      $items = array();
 
-    foreach ($result as $row) {
-      $votes = $row->field_votes_value ? $row->field_votes_value : 0;
-      $score = $row->field_trending_score_value ? $row->field_trending_score_value : 0;
+      foreach ($result as $row) {
+        $votes = !empty($row->field_votes_value) ? (int)$row->field_votes_value : 0;
+        $score = !empty($row->field_trending_score_value) ? (int)$row->field_trending_score_value : 0;
+        $difficulty = !empty($row->difficulty) ? check_plain($row->difficulty) : t('General');
 
-      $items[] = '
-        <div class="idea-card">
-          <a href="'.url('node/'.$row->nid).'">'.check_plain($row->title).'</a>
-          <div class="idea-stats">
-            <span class="votes">👍 '.$votes.' Votes</span>
-            <span class="score">🔥 '.$score.' Score</span>
+        $items[] = '
+          <div class="idea-card">
+            <a href="'.url('node/'.$row->nid).'">'.check_plain($row->title).'</a>
+            <span class="badge">' . $difficulty . '</span>
+            <div class="idea-stats">
+              <span class="votes">👍 '.$votes.' '.t('Votes').'</span>
+              <span class="score">🔥 '.$score.' '.t('Score').'</span>
+            </div>
           </div>
-        </div>
-      ';
-    }
+        ';
+      }
 
-    if (empty($items)) {
-      $items[] = '<p>No trending ideas yet.</p>';
-    }
+      if (empty($items)) {
+        $items[] = '<p>' . t('No trending ideas yet.') . '</p>';
+      }
 
-    $block['subject'] = t('Trending Ideas');
-    $block['content'] = array('#markup' => implode('', $items));
+      $block['subject'] = t('Trending Ideas');
+      $block['content'] = array(
+        '#markup' => implode('', $items),
+        '#allowed_tags' => array('div', 'a', 'span', 'p'),
+      );
+    } catch (Exception $e) {
+      watchdog('innovation_hub', 'Error rendering trending ideas block: %error', 
+        array('%error' => $e->getMessage()), WATCHDOG_ERROR);
+      $block['subject'] = t('Trending Ideas');
+      $block['content'] = array(
+        '#markup' => '<p>' . t('Error loading trending ideas.') . '</p>',
+      );
+    }
   }
 
   return $block;
@@ -242,34 +389,55 @@ function innovation_hub_block_view($delta = '') {
 /**
  * Implements hook_node_insert()
  * Actions when idea or event is created
+ * 
+ * IMPROVEMENTS:
+ * - Transaction safety
+ * - Proper logging
+ * - Cache invalidation
+ * - Error handling
  */
 function innovation_hub_node_insert($node) {
 
   if ($node->type == 'project_idea') {
-    // Set default status to Pending for new ideas
-    db_update('field_data_field_status')
-      ->fields(array('field_status_value' => 'Pending'))
-      ->condition('entity_id', $node->nid)
-      ->execute();
+    try {
+      // Set default status to Pending for new ideas
+      db_update('field_data_field_status')
+        ->fields(array('field_status_value' => 'Pending'))
+        ->condition('entity_id', $node->nid)
+        ->execute();
 
-    watchdog('innovation_hub', 'New idea submitted: %title (Status: Pending)', array('%title' => $node->title));
-    innovation_hub_update_score($node->nid);
+      // Initialize trending score
+      innovation_hub_update_score($node->nid);
+
+      watchdog('innovation_hub', 'New idea submitted: %title (Status: Pending)', 
+        array('%title' => $node->title), WATCHDOG_NOTICE);
+    } catch (Exception $e) {
+      watchdog('innovation_hub', 'Error initializing idea %nid: %error', 
+        array('%nid' => $node->nid, '%error' => $e->getMessage()), WATCHDOG_ERROR);
+    }
   }
 
   if ($node->type == 'hackathon_event') {
-    // Set default status to Pending for new events
-    db_update('field_data_field_event_status')
-      ->fields(array('field_event_status_value' => 'pending'))
-      ->condition('entity_id', $node->nid)
-      ->execute();
+    try {
+      // Set default status to Pending for new events
+      db_update('field_data_field_event_status')
+        ->fields(array('field_event_status_value' => 'pending'))
+        ->condition('entity_id', $node->nid)
+        ->execute();
 
-    watchdog('innovation_hub', 'New event submitted and set to pending: %title', array('%title' => $node->title));
+      watchdog('innovation_hub', 'New event submitted and set to pending: %title', 
+        array('%title' => $node->title), WATCHDOG_NOTICE);
+    } catch (Exception $e) {
+      watchdog('innovation_hub', 'Error initializing event %nid: %error', 
+        array('%nid' => $node->nid, '%error' => $e->getMessage()), WATCHDOG_ERROR);
+    }
   }
 }
 
 /**
  * Implements hook_node_view()
  * Adds vote button to idea page
+ * ✅ ONLY SHOWS FOR APPROVED IDEAS
  */
 function innovation_hub_node_view($node, $view_mode, $langcode) {
 
@@ -283,7 +451,7 @@ function innovation_hub_node_view($node, $view_mode, $langcode) {
 
     if ($is_approved) {
       $vote_link = l(
-        '👍 Vote',
+        '👍 ' . t('Vote'),
         'idea/'.$node->nid.'/vote',
         array('attributes' => array('class' => array('btn','btn-success','btn-sm')))
       );
@@ -299,86 +467,128 @@ function innovation_hub_node_view($node, $view_mode, $langcode) {
 /**
  * Calculates trending score for an idea
  * Formula: (votes × 2) + comments + recency_bonus
+ * 
+ * IMPROVEMENTS:
+ * - Comments filtered by published status only
+ * - Better error handling
+ * - Null checks
+ * - Type casting
  */
 function innovation_hub_calculate_score($nid) {
 
-  $created = db_query("
-    SELECT created FROM {node} WHERE nid = :nid
-  ", array(':nid'=>$nid))->fetchField();
-  
-  if (!$created) {
+  try {
+    $created = db_query("
+      SELECT created FROM {node} WHERE nid = :nid
+    ", array(':nid'=>$nid))->fetchField();
+    
+    if (empty($created)) {
+      return 0;
+    }
+
+    // Votes from field_votes_value (matches Ideas page)
+    $votes = db_query("
+      SELECT field_votes_value 
+      FROM {field_data_field_votes} 
+      WHERE entity_id = :nid
+      AND deleted = 0
+    ", array(':nid'=>$nid))->fetchField();
+    $votes = !empty($votes) ? (int)$votes : 0;
+
+    // ✅ COMMENTS - FILTER BY PUBLISHED STATUS ONLY
+    $comments = db_query("
+      SELECT COUNT(*) FROM {comment} 
+      WHERE nid = :nid AND status = 1
+    ", array(':nid'=>$nid))->fetchField();
+    $comments = !empty($comments) ? (int)$comments : 0;
+
+    // Recency bonus (in days since creation)
+    $days_old = (REQUEST_TIME - $created) / 86400;
+    if ($days_old <= 3) {
+      $recency_bonus = 3;
+    } elseif ($days_old <= 7) {
+      $recency_bonus = 1;
+    } else {
+      $recency_bonus = 0;
+    }
+
+    // Final score formula: (votes × 2) + comments + recency
+    $score = ($votes * 2) + $comments + $recency_bonus;
+
+    return (int)$score;
+  } catch (Exception $e) {
+    watchdog('innovation_hub', 'Error calculating score for %nid: %error', 
+      array('%nid' => $nid, '%error' => $e->getMessage()), WATCHDOG_ERROR);
     return 0;
   }
-
-  // Votes from field_votes_value (matches Ideas page)
-  $votes = db_query("
-    SELECT field_votes_value 
-    FROM {field_data_field_votes} 
-    WHERE entity_id = :nid
-  ", array(':nid'=>$nid))->fetchField();
-  $votes = $votes ? $votes : 0;
-
-  // Comments
-  $comments = db_query("
-    SELECT COUNT(*) FROM {comment} WHERE nid = :nid
-  ", array(':nid'=>$nid))->fetchField();
-  $comments = $comments ? $comments : 0;
-
-  // Recency bonus (in days since creation)
-  $days_old = (REQUEST_TIME - $created) / 86400;
-  if ($days_old <= 3) {
-    $recency_bonus = 3;
-  } elseif ($days_old <= 7) {
-    $recency_bonus = 1;
-  } else {
-    $recency_bonus = 0;
-  }
-
-  // Final score formula
-  $score = ($votes * 2) + $comments + $recency_bonus;
-
-  return $score;
 }
 
 /**
  * Updates trending score (insert if missing, update if exists)
+ * 
+ * IMPROVEMENTS:
+ * - Both field_data and field_revision tables updated
+ * - Transaction safety
+ * - Error handling
+ * - Type casting
  */
 function innovation_hub_update_score($nid) {
 
   $score = innovation_hub_calculate_score($nid);
 
-  $existing = db_query("
-    SELECT field_trending_score_value
-    FROM {field_data_field_trending_score}
-    WHERE entity_id = :nid
-  ", array(':nid'=>$nid))->fetchField();
+  try {
+    $existing = db_query("
+      SELECT field_trending_score_value
+      FROM {field_data_field_trending_score}
+      WHERE entity_id = :nid
+    ", array(':nid'=>$nid))->fetchField();
 
-  if ($existing === FALSE) {
-    // Insert new trending score row
-    db_insert('field_data_field_trending_score')
-      ->fields(array(
-        'entity_type' => 'node',
-        'bundle' => 'project_idea',
-        'deleted' => 0,
-        'entity_id' => $nid,
-        'revision_id' => $nid,
-        'language' => 'und',
-        'delta' => 0,
-        'field_trending_score_value' => $score
-      ))
-      ->execute();
-  } else {
-    // Update existing trending score
-    db_update('field_data_field_trending_score')
-      ->fields(array('field_trending_score_value' => $score))
-      ->condition('entity_id', $nid)
-      ->execute();
+    if ($existing === FALSE) {
+      // Insert new trending score row
+      db_insert('field_data_field_trending_score')
+        ->fields(array(
+          'entity_type' => 'node',
+          'bundle' => 'project_idea',
+          'deleted' => 0,
+          'entity_id' => $nid,
+          'revision_id' => $nid,
+          'language' => 'und',
+          'delta' => 0,
+          'field_trending_score_value' => $score
+        ))
+        ->execute();
 
-    // Also update revision table
-    db_update('field_revision_field_trending_score')
-      ->fields(array('field_trending_score_value' => $score))
-      ->condition('entity_id', $nid)
-      ->execute();
+      // Also insert in revision table
+      if (db_table_exists('field_revision_field_trending_score')) {
+        db_insert('field_revision_field_trending_score')
+          ->fields(array(
+            'entity_type' => 'node',
+            'bundle' => 'project_idea',
+            'deleted' => 0,
+            'entity_id' => $nid,
+            'revision_id' => $nid,
+            'language' => 'und',
+            'delta' => 0,
+            'field_trending_score_value' => $score
+          ))
+          ->execute();
+      }
+    } else {
+      // Update existing trending score in both tables
+      db_update('field_data_field_trending_score')
+        ->fields(array('field_trending_score_value' => $score))
+        ->condition('entity_id', $nid)
+        ->execute();
+
+      if (db_table_exists('field_revision_field_trending_score')) {
+        db_update('field_revision_field_trending_score')
+          ->fields(array('field_trending_score_value' => $score))
+          ->condition('entity_id', $nid)
+          ->execute();
+      }
+    }
+  } catch (Exception $e) {
+    watchdog('innovation_hub', 'Error updating score for %nid: %error', 
+      array('%nid' => $nid, '%error' => $e->getMessage()), WATCHDOG_ERROR);
   }
 }
 
@@ -397,7 +607,9 @@ function innovation_hub_node_update($node) {
  * Updates score when comment is added
  */
 function innovation_hub_comment_insert($comment) {
-  innovation_hub_update_score($comment->nid);
+  if (!empty($comment->nid)) {
+    innovation_hub_update_score($comment->nid);
+  }
 }
 
 /**
@@ -406,8 +618,8 @@ function innovation_hub_comment_insert($comment) {
  */
 function innovation_hub_form_alter(&$form, &$form_state, $form_id) {
 
-  // Modify Project Idea submission form
-  if ($form_id == 'project_idea_node_form') {
+  // Modify Project Idea submission form (with fallback form IDs)
+  if ($form_id == 'project_idea_node_form' || $form_id == 'node_project_idea_form') {
 
     // Add helpful description to title
     $form['title']['#description'] = t('Enter a clear and innovative project idea title.');
@@ -427,6 +639,32 @@ function innovation_hub_form_alter(&$form, &$form_state, $form_id) {
     if (isset($form['status'])) {
       $form['status']['widget']['#description'] = t('Your idea will be pending approval by an administrator before appearing publicly.');
     }
+
+    // Add form validation
+    $form['#validate'][] = 'innovation_hub_idea_form_validate';
+  }
+}
+
+/**
+ * Custom form validation for idea submission
+ */
+function innovation_hub_idea_form_validate($form, &$form_state) {
+  $title = trim($form_state['values']['title']);
+  
+  // Ensure minimum title length
+  if (strlen($title) < 5) {
+    form_set_error('title', t('Idea title must be at least 5 characters.'));
+  }
+  
+  // Ensure body content exists
+  if (isset($form_state['values']['body']) && is_array($form_state['values']['body'])) {
+    $body_value = '';
+    if (isset($form_state['values']['body'][LANGUAGE_NONE][0]['value'])) {
+      $body_value = $form_state['values']['body'][LANGUAGE_NONE][0]['value'];
+    }
+    if (strlen(trim($body_value)) < 20) {
+      form_set_error('body', t('Idea description must be at least 20 characters.'));
+    }
   }
 }
 
@@ -438,6 +676,7 @@ function innovation_hub_theme() {
   return array(
     'innovation_hub_homepage' => array(
       'template' => 'innovation-hub-homepage',
+      'path' => drupal_get_path('module', 'innovation_hub') . '/templates',
       'variables' => array(
         'ideas' => NULL,
         'events' => NULL,
@@ -450,20 +689,52 @@ function innovation_hub_theme() {
 /**
  * Implements hook_views_query_alter()
  * Modifies Views queries for Ideas view
+ * 
+ * IMPROVED: Appends sort rather than replacing
  */
 function innovation_hub_views_query_alter(&$view, &$query) {
   
   // Modify the Ideas view to sort by trending score
   if ($view->name == 'ideas') {
-    // Clear existing sort criteria
-    $query->orderby = array();
+    // Append trending score sort (don't clear existing)
+    if (!isset($query->orderby)) {
+      $query->orderby = array();
+    }
 
-    // Sort by trending score (descending - highest first)
     $query->orderby[] = array(
       'field' => 'field_trending_score_value', 
       'direction' => 'DESC',
     );
   }
+}
+
+/**
+ * Implements hook_flush_caches()
+ * Define custom cache bin for innovation hub
+ */
+function innovation_hub_flush_caches() {
+  return array('cache_innovation_hub');
+}
+
+/**
+ * Implements hook_permission()
+ * Define permissions for the module
+ */
+function innovation_hub_permission() {
+  return array(
+    'administer innovation hub' => array(
+      'title' => t('Administer Innovation Hub'),
+      'description' => t('Manage ideas, events, and settings'),
+    ),
+    'submit ideas' => array(
+      'title' => t('Submit Ideas'),
+      'description' => t('Submit and edit project ideas'),
+    ),
+    'vote on ideas' => array(
+      'title' => t('Vote on Ideas'),
+      'description' => t('Vote for project ideas'),
+    ),
+  );
 }
 
 /**
@@ -487,4 +758,7 @@ function innovation_hub_simpletest_alter(&$tests) {
     $tests['InnovationHubTest'] = $test_file;
   }
 }
+
+
+
 ?>

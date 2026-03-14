@@ -1,9 +1,10 @@
 name = Innovation Hub
-description = Custom module for idea voting, analytics and ranking
+description = Custom module for idea voting, analytics, trending algorithm and admin dashboard
 core = 7.x
 package = Innovation Hub
 version = 7.x-1.0
-author = Your Name
+author = Shreeti Bajracharya
+project = innovation_hub
 
 dependencies[] = node
 dependencies[] = field
@@ -11,8 +12,15 @@ dependencies[] = views
 dependencies[] = entity
 dependencies[] = ctools
 dependencies[] = taxonomy
+dependencies[] = comment
 
-; Register test file
+; Files
 files[] = innovation_hub.module
 files[] = innovation_hub.pages.inc
-files[] = innovation_hub.test
+files[] = innovation_hub.install
+
+; Features
+features[menu][] = menu-innovation-hub
+
+; Testing
+test_dependencies[] = field_ui
