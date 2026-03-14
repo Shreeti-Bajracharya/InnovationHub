@@ -18,6 +18,7 @@ dependencies[] = comment
 files[] = innovation_hub.module
 files[] = innovation_hub.pages.inc
 files[] = innovation_hub.install
+files[] = innovation_hub.test
 
 ; Features
 features[menu][] = menu-innovation-hub

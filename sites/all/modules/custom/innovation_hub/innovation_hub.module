@@ -39,14 +39,14 @@ function innovation_hub_menu() {
   );
 
   // Vote route
-  $items['idea/%/vote'] = array(
-    'title' => 'Vote Idea',
-    'page callback' => 'innovation_hub_vote',
-    'page arguments' => array(1),
-    'access callback' => 'user_is_logged_in',
-    'access arguments' => array(),
-    'type' => MENU_CALLBACK,
-  );
+  $items['idea/%node/vote'] = array(
+  'title' => 'Vote Idea',
+  'page callback' => 'innovation_hub_vote',
+  'page arguments' => array(1),
+  'access callback' => 'user_is_logged_in',
+  'access arguments' => array(),
+  'type' => MENU_CALLBACK,
+);
 
   $items['admin/pending-events'] = array(
     'title' => 'Pending Events',

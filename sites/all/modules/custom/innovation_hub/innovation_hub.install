@@ -22,7 +22,6 @@ function innovation_hub_schema() {
 
   /**
    * Votes Table
-   * Stores individual user votes for project ideas
    */
   $schema['innovation_hub_votes'] = array(
     'description' => 'Stores individual votes cast by users on project ideas.',
@@ -30,24 +29,20 @@ function innovation_hub_schema() {
       'vid' => array(
         'type' => 'serial',
         'not null' => TRUE,
-        'description' => 'Unique vote ID (primary key).',
       ),
       'nid' => array(
         'type' => 'int',
         'unsigned' => TRUE,
         'not null' => TRUE,
-        'description' => 'Foreign key to {node}.nid (project idea being voted on).',
       ),
       'uid' => array(
         'type' => 'int',
         'unsigned' => TRUE,
         'not null' => TRUE,
-        'description' => 'Foreign key to {users}.uid (user casting the vote).',
       ),
       'created' => array(
         'type' => 'int',
         'not null' => TRUE,
-        'description' => 'Unix timestamp when the vote was cast.',
       ),
     ),
     'primary key' => array('vid'),
@@ -59,6 +54,46 @@ function innovation_hub_schema() {
       'uid' => array('uid'),
       'created' => array('created'),
       'nid_created' => array('nid', 'created'),
+    ),
+  );
+
+  /**
+   * Cache Table (Required for SimpleTest)
+   */
+  $schema['cache_innovation_hub'] = array(
+    'description' => 'Cache table for Innovation Hub.',
+    'fields' => array(
+      'cid' => array(
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'data' => array(
+        'type' => 'blob',
+        'size' => 'big',
+        'not null' => FALSE,
+      ),
+      'expire' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'created' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'serialized' => array(
+        'type' => 'int',
+        'size' => 'small',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+    ),
+    'primary key' => array('cid'),
+    'indexes' => array(
+      'expire' => array('expire'),
     ),
   );
 
