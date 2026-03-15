@@ -597,104 +597,125 @@ $output .= theme('innovation_hub_homepage', array(
   */
 
   $output .= '
-    <div class="container" style="margin-top: 80px; margin-bottom: 80px;">
-      <h2 class="text-center mb-4" style="font-size: 30px; font-weight: 800;">Platform Statistics</h2>
-      
-      <div style="max-width: 800px; margin: 0 auto; background: white; border-radius: 12px; padding: 30px; box-shadow: 0 6px 25px rgba(0,0,0,0.08);">
-        <div style="position: relative; height: 300px;">
-          <canvas id="homepageChart"></canvas>
-        </div>
+  <div class="container" style="margin-top: 80px; margin-bottom: 80px;">
+    <h2 class="text-center mb-4" style="font-size: 30px; font-weight: 800; color: #243133;">Platform Statistics</h2>
+    
+    <div style="max-width: 800px; margin: 0 auto; background: rgba(255,255,255,0.92); border: 1px solid #dedbd2; border-radius: 22px; padding: 30px; box-shadow: 0 10px 30px rgba(74,87,89,0.10);">
+      <div style="position: relative; height: 300px;">
+        <canvas id="homepageChart"></canvas>
       </div>
+    </div>
 
-      <script>
-      (function() {
-        "use strict";
-        
-        // Function to initialize chart
-        function initChart() {
-          // Check if Chart.js is loaded
-          if (typeof Chart === "undefined") {
-            console.warn("Chart.js not loaded yet, retrying...");
-            setTimeout(initChart, 100);
-            return;
-          }
+    <script>
+    (function() {
+      "use strict";
+      
+      function initChart() {
+        if (typeof Chart === "undefined") {
+          console.warn("Chart.js not loaded yet, retrying...");
+          setTimeout(initChart, 100);
+          return;
+        }
 
-          var ctx = document.getElementById("homepageChart");
-          if (!ctx) {
-            console.error("Canvas element with id=\"homepageChart\" not found");
-            return;
-          }
+        var ctx = document.getElementById("homepageChart");
+        if (!ctx) {
+          console.error("Canvas element with id=\"homepageChart\" not found");
+          return;
+        }
 
-          try {
-            new Chart(ctx, {
-              type: "bar",
-              data: {
-                labels: ["Ideas", "Events", "Users"],
-                datasets: [{
-                  label: "Platform Data",
-                  data: [' . (int)$ideas . ', ' . (int)$events . ', ' . (int)$users . '],
-                  backgroundColor: [
-                    "rgba(54, 162, 235, 0.8)",
-                    "rgba(75, 192, 192, 0.8)",
-                    "rgba(153, 102, 255, 0.8)"
-                  ],
-                  borderColor: [
-                    "rgba(54, 162, 235, 1)",
-                    "rgba(75, 192, 192, 1)",
-                    "rgba(153, 102, 255, 1)"
-                  ],
-                  borderWidth: 2,
-                  borderRadius: 5
-                }]
-              },
-              options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                  legend: {
-                    display: true,
-                    position: "top"
-                  }
-                },
-                scales: {
-                  y: {
-                    beginAtZero: true,
-                    ticks: {
-                      stepSize: 1,
-                      font: {
-                        size: 12,
-                        weight: "bold"
-                      }
-                    }
-                  },
-                  x: {
-                    ticks: {
-                      font: {
-                        size: 12,
-                        weight: "bold"
-                      }
+        try {
+          new Chart(ctx, {
+            type: "bar",
+            data: {
+              labels: ["Ideas", "Events", "Users"],
+              datasets: [{
+                label: "Platform Data",
+                data: [' . (int)$ideas . ', ' . (int)$events . ', ' . (int)$users . '],
+                backgroundColor: [
+                  "rgba(237, 175, 184, 0.85)",
+                  "rgba(176, 196, 177, 0.85)",
+                  "rgba(74, 87, 89, 0.85)"
+                ],
+                borderColor: [
+                  "rgba(237, 175, 184, 1)",
+                  "rgba(176, 196, 177, 1)",
+                  "rgba(74, 87, 89, 1)"
+                ],
+                borderWidth: 2,
+                borderRadius: 10,
+                hoverBackgroundColor: [
+                  "rgba(237, 175, 184, 1)",
+                  "rgba(176, 196, 177, 1)",
+                  "rgba(74, 87, 89, 1)"
+                ],
+                hoverBorderColor: [
+                  "rgba(220, 150, 162, 1)",
+                  "rgba(150, 175, 152, 1)",
+                  "rgba(52, 63, 65, 1)"
+                ]
+              }]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                legend: {
+                  display: true,
+                  position: "top",
+                  labels: {
+                    color: "#334042",
+                    font: {
+                      size: 13,
+                      weight: "bold"
                     }
                   }
                 }
+              },
+              scales: {
+                y: {
+                  beginAtZero: true,
+                  ticks: {
+                    stepSize: 1,
+                    color: "#667274",
+                    font: {
+                      size: 12,
+                      weight: "bold"
+                    }
+                  },
+                  grid: {
+                    color: "rgba(222, 219, 210, 0.7)"
+                  }
+                },
+                x: {
+                  ticks: {
+                    color: "#334042",
+                    font: {
+                      size: 12,
+                      weight: "bold"
+                    }
+                  },
+                  grid: {
+                    display: false
+                  }
+                }
               }
-            });
-            console.log("Chart initialized successfully");
-          } catch (error) {
-            console.error("Error initializing chart:", error);
-          }
+            }
+          });
+          console.log("Chart initialized successfully");
+        } catch (error) {
+          console.error("Error initializing chart:", error);
         }
+      }
 
-        // Wait for DOM to be ready
-        if (document.readyState === "loading") {
-          document.addEventListener("DOMContentLoaded", initChart);
-        } else {
-          // DOM is already ready
-          initChart();
-        }
-      })();
-      </script>
-    </div>
-  ';
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", initChart);
+      } else {
+        initChart();
+      }
+    })();
+    </script>
+  </div>
+';
 
   return $output;
 }

@@ -215,3 +215,5 @@ project = "bootstrap"
 datestamp = "1447089562"
 
 stylesheets[all][] = css/style.css
+
+stylesheets[all][] = css/footer.css

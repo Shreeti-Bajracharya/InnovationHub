@@ -89,10 +89,10 @@ function innovation_hub_menu() {
  * - Proper error handling
  * - Revision table synchronization
  */
-function innovation_hub_vote($nid) {
+function innovation_hub_vote($node) {
   global $user;
 
-  $node = node_load($nid);
+  $nid = $node->nid;
   if (!$node || $node->type != 'project_idea') {
     drupal_not_found();
     return;
